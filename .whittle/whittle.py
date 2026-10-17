@@ -260,7 +260,11 @@ def summary():
     return {"sessions": len(decisions), "open": open_, "arms": arms, "preferred": prefs, "verdict": verdict}
 
 
-def status():
+def status(sid=None):
+    if sid:
+        path = HOME / "sessions" / sid
+        arm = load_session(sid)["arm"] if path.exists() else None
+        print(f"this session: {arm} (arms/{arm}.md)\n" if arm else "this session: not tracked by whittle\n")
     report = summary()
     arms = report["arms"]
     if not report["sessions"]:
@@ -290,8 +294,8 @@ def status():
 HOOKS = {"SessionStart": session_start, "UserPromptSubmit": prompt, "PostToolUse": post_tool_use}
 
 if __name__ == "__main__":
-    if sys.argv[1:] == ["status"]:
-        status()
+    if sys.argv[1:2] == ["status"]:
+        status(*sys.argv[2:3])
         sys.exit()
     try:
         event = json.load(sys.stdin)

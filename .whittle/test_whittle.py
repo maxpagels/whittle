@@ -287,3 +287,15 @@ def test_old_session_files_still_resume(w):
     assert start(w, "old") == (w.HOME / "arms" / "tests-first.md").read_text() + "\n"
     settle_later(w)  # and settling skips them rather than failing
     assert (w.HOME / "sessions" / "old").read_text() == "whittle:0 tests-first"
+
+
+def test_status_shows_this_sessions_arm_file(w):
+    start(w, "mine")
+    arm = json.loads((w.HOME / "sessions" / "mine").read_text())["arm"]
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        w.status("mine")
+        w.status("unknown")
+    text = out.getvalue()
+    assert f"this session: {arm} (arms/{arm}.md)" in text
+    assert "this session: not tracked by whittle" in text
