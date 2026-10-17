@@ -1,10 +1,35 @@
 {
   "hooks": {
     "SessionStart": [
-      { "hooks": [{ "type": "command", "command": "uv run --quiet --script \"$CLAUDE_PROJECT_DIR\"/.whittle/whittle.py" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --script \"$CLAUDE_PROJECT_DIR\"/.whittle/whittle.py"
+          }
+        ]
+      }
     ],
     "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "uv run --quiet --script \"$CLAUDE_PROJECT_DIR\"/.whittle/whittle.py" }] }
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --script \"$CLAUDE_PROJECT_DIR\"/.whittle/whittle.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --quiet --script \"$CLAUDE_PROJECT_DIR\"/.whittle/whittle.py"
+          }
+        ]
+      }
     ]
   }
 }
