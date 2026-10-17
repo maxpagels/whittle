@@ -1,0 +1,5 @@
+state
+state.tmp
+lock
+log.jsonl
+sessions/

@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "uv run --quiet --script \"$CLAUDE_PROJECT_DIR\"/.whittle/whittle.py" }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "uv run --quiet --script \"$CLAUDE_PROJECT_DIR\"/.whittle/whittle.py" }] }
+    ]
+  }
+}
