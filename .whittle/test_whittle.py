@@ -3,7 +3,7 @@
     uv run --with pytest --with 'gittins>=2' pytest -q .whittle/test_whittle.py
 """
 
-import contextlib, importlib.util, io, json, shutil, time
+import contextlib, importlib.util, io, json, shutil
 from pathlib import Path
 
 import pytest
@@ -15,7 +15,6 @@ HOUR = 3600
 class Clock:
     def __init__(self, t): self.t = t
     def time(self): return self.t
-    def localtime(self): return time.localtime(self.t)
 
 
 @pytest.fixture
@@ -253,8 +252,7 @@ def test_status_counts_each_way_a_session_ends(w, tmp_path):
     arm_of = lambda sid: json.loads((w.HOME / "sessions" / sid).read_text())["arm"]
     assert arms[arm_of("rated")]["rated"] == 1 and arms[arm_of("auto")]["auto"] == 1
     assert arms[arm_of("auto")]["mean"] == 1.0
-    assert sum(report["preferred"].values()) == 24
-    assert set(report["preferred"]) <= set(arms) | {"no preference"}
+    assert report["preferred"] in set(arms) | {"no preference"}
     assert report["verdict"].startswith("not enough data")
 
     out = io.StringIO()
@@ -262,6 +260,12 @@ def test_status_counts_each_way_a_session_ends(w, tmp_path):
         w.status()
     text = out.getvalue()
     assert all(arm in text for arm in arms) and "not enough data" in text
+
+
+def test_context_is_the_model_only(w):
+    start(w, "s1")
+    [d] = [json.loads(line) for line in (w.HOME / "log.jsonl").read_text().splitlines()]
+    assert d["context"] == {"model": "m"}
 
 
 def test_status_shows_this_sessions_arm_file(w):

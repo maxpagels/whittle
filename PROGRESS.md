@@ -71,6 +71,13 @@ The output, log, state and sessions are saved in `.whittle/sim-runs/2026-10-17-s
 - **This contradicts the design.** DESIGN §0 says the current session's arm isn't shown, and the status text and `summary()` still say open sessions' arms stay hidden. Knowing the arm before rating `+`/`-` biases the rating. Either drop the change or make it an explicit debug flag, and update DESIGN and the status text to match.
 - Added a pirate arm, `arms/arr.md` ("Answer questions like a pirate."). **It breaks `simulate.py`:** the simulated user only has a P(`+`) for the three original arms, so the run fails with `KeyError: 'arr'` once `arr` is picked.
 
+### `hour` dropped from the context
+
+- The context is now just `{"model": ...}`. At 24 separate values, `hour` split the data; in a standalone test it cut the best arm's late share from 89% to 68%.
+- `/whittle` prints a single `prefers: <arm>` instead of a count per hour. `simulate.py`'s replay check compares one greedy arm instead of 24.
+- The live state was kept: it deserializes fine, and the weights learned for `hour` features are simply never read again.
+- Simulation (seed 1, without `arr`, which still breaks the sim) passes: `tests-first` 9% -> 91% of picks. 14 tests pass.
+
 ## gittins CLI
 
 `gittins` v2.0.0 is on PATH at `~/.local/bin/gittins`. The simulation now runs its CLI checks instead of skipping them. Earlier runs used a source build of `gittins-cli` v1.0.9:
@@ -85,7 +92,6 @@ cargo install --git https://github.com/maxpagels/gittins --rev 5a7f2413d0ae166d9
 1. **Collision guard.** Raising `bits` (now 18) fixed this arm set partly by luck; adding arms or context values can collide again silently. Add a check that hashes every arm's features for every context value and fails if two arms share a slot. Put it in `simulate.py`, and/or warn at `SessionStart`.
 2. **Simulate realistic usage (§16.5).** Use 10–30 sessions a day, sparse ratings, and 5–10 point gaps between arms. Questions to answer:
    - How many weeks until it learns?
-   - Should `hour` be grouped or dropped? At 24 separate values it splits the data; in a standalone test it cut the best arm's late share from 89% to 68%.
    - What does training unrated sessions as 0.5 cost? It shrinks the gaps between arms.
    - Which ε? Use `gittins sweep` on the simulated logs.
 3. **Version the arms (§10.3).** Name each arm by a hash of its text, so editing an arm doesn't mix new data into the old arm's history.

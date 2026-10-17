@@ -142,7 +142,7 @@ def session_start(event):
         arm = load_session(sid)["arm"]
     else:
         arms = sorted(p.stem for p in (HOME / "arms").glob("*.md"))
-        context = {"model": event.get("model"), "hour": str(time.localtime().tm_hour)}
+        context = {"model": event.get("model")}
 
         def step(state):
             now = time.time()
@@ -196,20 +196,15 @@ def prompt(event):
 
 
 def preferred(serialized, arms, model):
-    """The arm the state exploits at each hour, or "no preference" while scores tie. Read-only."""
-    hours = Counter()
-    for hour in range(24):
-        best = "no preference"
-        for k in range(100):
-            rec = gittins.decide(gittins.deserialize(serialized), {"model": model, "hour": str(hour)},
-                                 [(a, {}) for a in arms], t=0.0, salt=f"status-{k}")
-            if abs(rec.propensity - 1 / len(arms)) < 1e-9:
-                break  # uniform: every arm scores the same
-            if rec.propensity > 0.5:
-                best = arms[rec.chosen]
-                break
-        hours[best] += 1
-    return dict(hours)
+    """The arm the state exploits, or "no preference" while scores tie. Read-only."""
+    for k in range(100):
+        rec = gittins.decide(gittins.deserialize(serialized), {"model": model},
+                             [(a, {}) for a in arms], t=0.0, salt=f"status-{k}")
+        if abs(rec.propensity - 1 / len(arms)) < 1e-9:
+            break  # uniform: every arm scores the same
+        if rec.propensity > 0.5:
+            return arms[rec.chosen]
+    return "no preference"
 
 
 def summary():
@@ -238,7 +233,7 @@ def summary():
         rewards = arm.pop("rewards")
         arm["mean"] = sum(rewards) / len(rewards) if rewards else None
     state = HOME / "state"
-    prefs = preferred(state.read_text(), names, decisions[-1]["context"]["model"]) if state.exists() and decisions else {}
+    prefs = preferred(state.read_text(), names, decisions[-1]["context"]["model"]) if state.exists() and decisions else None
     fewest = min(names, key=lambda a: arms[a]["rated"] + arms[a]["auto"]) if names else None
     seen = arms[fewest]["rated"] + arms[fewest]["auto"] if fewest else 0
     verdict = (f"not enough data: {MIN_OBSERVED} scored sessions per arm needed, {fewest} has {seen}"
@@ -267,8 +262,7 @@ def status(sid=None):
     print("\nmean = average reward over rated and auto-scored sessions; expired ones count as missing")
     if expired > scored:
         print(f"warning: more sessions expired ({expired}) than were scored ({scored})")
-    prefs = sorted(report["preferred"].items(), key=lambda kv: -kv[1])
-    print("prefers: " + (", ".join(f"{a} ({h}/24 hours)" for a, h in prefs) or "no state yet"))
+    print("prefers: " + (report["preferred"] or "no state yet"))
     print(report["verdict"])
     cli = shutil.which("gittins")
     if not report["verdict"].startswith("not enough") and cli:

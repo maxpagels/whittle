@@ -10,7 +10,7 @@ Runs the real session_start / prompt hooks from whittle.py in a temp dir (the li
     uv run --script .whittle/simulate.py [--sessions 600] [--seed 1] [--keep DIR]
 """
 
-import argparse, contextlib, importlib.util, io, json, random, shutil, subprocess, sys, tempfile, time
+import argparse, contextlib, importlib.util, io, json, random, shutil, subprocess, sys, tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -25,7 +25,6 @@ BITS = 18  # must match gittins.create(bits=...) in whittle.py
 class Clock:
     def __init__(self, t): self.t = t
     def time(self): return self.t
-    def localtime(self): return time.localtime(self.t)
 
 
 def load(home, clock):
@@ -45,12 +44,12 @@ def run(fn, event):
     return out.getvalue()
 
 
-def greedy(serialized, hour):
-    """The arm a state exploits for this hour: decide until a non-exploration pick."""
+def greedy(serialized):
+    """The arm a state exploits: decide until a non-exploration pick."""
     import gittins
     arms = sorted(P_PLUS)
     for k in range(100):
-        rec = gittins.decide(gittins.deserialize(serialized), {"model": MODEL, "hour": str(hour)},
+        rec = gittins.decide(gittins.deserialize(serialized), {"model": MODEL},
                              [(a, {}) for a in arms], t=2e9 + k, salt=f"probe-{k}")
         if rec.propensity > 0.5:
             return arms[rec.chosen]
@@ -155,8 +154,7 @@ def main():
         r = subprocess.run([gittins, "replay", "--log", str(log), "--bits", str(BITS), "--horizon", "86400",
                             "--default-reward", "0.5", "--epsilon", "0.2"], capture_output=True, text=True)
         # replay drops still-open decisions, so compare policies, not bytes
-        same = r.returncode == 0 and all(
-            greedy(r.stdout.strip(), h) == greedy((home / "state").read_text(), h) for h in range(24))
+        same = r.returncode == 0 and greedy(r.stdout.strip()) == greedy((home / "state").read_text())
         check(same, "gittins replay of the log rebuilds a state with the same policy", failures)
         e = subprocess.run([gittins, "eval", "--log", str(log), "--bits", str(BITS), "--epsilon", "0.2"],
                            capture_output=True, text=True)
