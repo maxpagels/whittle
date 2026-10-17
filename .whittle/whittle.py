@@ -5,7 +5,7 @@
 """whittle v0: gittins picks an arm at session start. You rate with + or -; sessions you
 don't rate are scored from how much of Claude's code survived and how often you pushed back."""
 
-import fcntl, json, re, shutil, subprocess, sys, time
+import fcntl, hashlib, json, re, shutil, subprocess, sys, time
 from collections import Counter
 from pathlib import Path
 
@@ -52,10 +52,22 @@ def save_session(sid, session):
     tmp.replace(path)
 
 
+def digest(line):
+    return hashlib.blake2b(line.encode(), digest_size=8).hexdigest()
+
+
 def significant(text):
-    """Lines worth tracking: braces, blanks and other boilerplate survive any edit."""
+    """Hashes of the lines worth tracking: braces, blanks and other boilerplate survive any edit."""
     lines = (line.strip() for line in text.splitlines())
-    return Counter(line for line in lines if len(line) >= 4 and any(c.isalnum() for c in line))
+    return Counter(digest(line) for line in lines if len(line) >= 4 and any(c.isalnum() for c in line))
+
+
+def tracked(lines):
+    """A session's recorded lines as hashes; files written before hashing stored the raw text."""
+    hashed = Counter()
+    for line, n in lines.items():
+        hashed[line if len(line) == 16 and all(c in "0123456789abcdef" for c in line) else digest(line)] += n
+    return hashed
 
 
 def retention(session):
@@ -64,7 +76,7 @@ def retention(session):
     for name, lines in session.get("lines", {}).items():
         path = Path(name)
         now = significant(path.read_text(errors="replace")) if path.is_file() else Counter()
-        kept += sum((Counter(lines) & now).values())
+        kept += sum((tracked(lines) & now).values())
         total += sum(lines.values())
     return (kept / total if total else None), total
 
@@ -168,7 +180,7 @@ def post_tool_use(event):
     if event.get("tool_name") == "Write":
         lines = significant(edit.get("content", ""))
     else:
-        lines = Counter(session["lines"].get(name, {}))
+        lines = tracked(session["lines"].get(name, {}))
         for e in edit.get("edits") or [edit]:
             old, new = significant(e.get("old_string", "")), significant(e.get("new_string", ""))
             lines = lines - (old - new) + (new - old)

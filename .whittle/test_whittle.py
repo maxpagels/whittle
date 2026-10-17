@@ -120,6 +120,33 @@ def test_claude_reworking_its_own_lines_is_not_lost(w, tmp_path):
     assert row["retention"] == 1.0 and row["lines"] == 2
 
 
+def test_sessions_store_hashes_not_code(w, tmp_path):
+    src = tmp_path / "app.py"
+    start(w, "s1")
+    write(w, "s1", src, "def main():\n    return compute()\n")
+
+    stored = (w.HOME / "sessions" / "s1").read_text()
+    assert "compute" not in stored
+    [lines] = json.loads(stored)["lines"].values()
+    assert len(lines) == 2 and all(len(k) == 16 for k in lines)
+
+
+def test_sessions_recorded_as_raw_text_still_score(w, tmp_path):
+    src = tmp_path / "app.py"
+    src.write_text("def main():\n    return compute()\n")
+    start(w, "s1")
+    path = w.HOME / "sessions" / "s1"
+    session = json.loads(path.read_text())
+    session["lines"] = {str(src): {"def main():": 1, "return compute()": 1}}
+    path.write_text(json.dumps(session))
+    edit(w, "s1", src, "return compute()", "return compute(items)")  # replaces a line recorded raw
+
+    settle_later(w)
+
+    [row] = signals(w, "s1")
+    assert row["retention"] == 1.0 and row["lines"] == 2
+
+
 def test_trivial_lines_are_ignored(w, tmp_path):
     src = tmp_path / "app.js"
     start(w, "s1")
