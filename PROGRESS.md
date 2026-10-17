@@ -65,6 +65,12 @@ The output, log, state and sessions are saved in `.whittle/sim-runs/2026-10-17-s
 - **50 scored sessions per arm is slow at ε = 0.2.** Each losing arm gets about 7% of traffic, so it takes roughly 750 sessions. In the 600-session simulation, baseline reached 33.
 - **The `gittins eval` section isn't very informative yet.** It estimates the logging configuration on its own log, so IPS equals the logged mean, with weights of 1. The useful number is DESIGN §11.2's baseline comparison: an IPS estimate of "always baseline" (mean of 𝟙[arm = baseline]·r/p) against the learned policy. It's cheap to compute from the log in `summary()`.
 
+### `/whittle` shows this session's arm (branch `whittle-show-session-arm`)
+
+- `whittle.py status [SESSION_ID]` prints `this session: <arm> (arms/<arm>.md)` first, or `not tracked by whittle`. `.claude/commands/whittle.md` passes `${CLAUDE_SESSION_ID}` and no longer tells Claude to keep the arm hidden. Covered by 1 more test (15 in total).
+- **This contradicts the design.** DESIGN §0 says the current session's arm isn't shown, and the status text and `summary()` still say open sessions' arms stay hidden. Knowing the arm before rating `+`/`-` biases the rating. Either drop the change or make it an explicit debug flag, and update DESIGN and the status text to match.
+- Added a pirate arm, `arms/arr.md` ("Answer questions like a pirate."). **It breaks `simulate.py`:** the simulated user only has a P(`+`) for the three original arms, so the run fails with `KeyError: 'arr'` once `arr` is picked.
+
 ## gittins CLI
 
 `gittins` v2.0.0 is on PATH at `~/.local/bin/gittins`. The simulation now runs its CLI checks instead of skipping them. Earlier runs used a source build of `gittins-cli` v1.0.9:
@@ -75,7 +81,8 @@ cargo install --git https://github.com/maxpagels/gittins --rev 5a7f2413d0ae166d9
 
 ## Next steps (recommended order)
 
-1. **Collision guard.** `bits=12` fixed this arm set partly by luck; adding arms or context values can collide again silently. Add a check that hashes every arm's features for every context value and fails if two arms share a slot. Put it in `simulate.py`, and/or warn at `SessionStart`.
+0. **Fix the simulation and decide on the arm reveal.** Copy only the arms in `P_PLUS` into the sim's scratch dir (or give unknown arms a default P(`+`)); then resolve the design conflict above.
+1. **Collision guard.** Raising `bits` (now 18) fixed this arm set partly by luck; adding arms or context values can collide again silently. Add a check that hashes every arm's features for every context value and fails if two arms share a slot. Put it in `simulate.py`, and/or warn at `SessionStart`.
 2. **Simulate realistic usage (§16.5).** Use 10–30 sessions a day, sparse ratings, and 5–10 point gaps between arms. Questions to answer:
    - How many weeks until it learns?
    - Should `hour` be grouped or dropped? At 24 separate values it splits the data; in a standalone test it cut the best arm's late share from 89% to 68%.
