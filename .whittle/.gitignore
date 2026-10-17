@@ -3,3 +3,4 @@ state.tmp
 lock
 log.jsonl
 sessions/
+sim-runs/

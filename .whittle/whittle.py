@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["gittins"]
+# dependencies = ["gittins>=2"]
 # ///
 """whittle v0: gittins picks an arm at session start, you rate with + or -."""
 
@@ -18,7 +18,7 @@ def with_state(step):
         fcntl.flock(lock, fcntl.LOCK_EX)
         path = HOME / "state"
         state = (gittins.deserialize(path.read_text()) if path.exists()
-                 else gittins.create(bits=8, horizon=86400.0, epsilon=0.2, default_reward=0.5))
+                 else gittins.create(bits=18, horizon=86400.0, epsilon=0.2, default_reward=0.5))
         result, items = step(state)
         with open(HOME / "log.jsonl", "a") as f:
             for item in items:

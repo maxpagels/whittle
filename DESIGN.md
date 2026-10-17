@@ -13,7 +13,7 @@ Everything below is the roadmap. What exists today is one file, `.whittle/whittl
 - **`SessionStart`:** gittins picks an arm (context: model, hour) and the hook prints its text into the session. Resumed or compacted sessions get the same arm again.
 - **`UserPromptSubmit`:** a prompt of just `+` or `-` rewards the session's decision with 1 or 0. The prompt is blocked, so Claude never sees it. Each session can be rated once.
 - **Unrated sessions** expire after 24h and train as 0.5.
-- **The log is `.whittle/log.jsonl`**, a plain gittins experience log. `gittins verify` and `gittins eval --bits 8 --epsilon 0.2` run on it directly. Settings: ε = 0.2, `bits` = 8.
+- **The log is `.whittle/log.jsonl`**, a plain gittins experience log. `gittins verify` and `gittins eval --bits 18 --epsilon 0.2` run on it directly. Settings: ε = 0.2, `bits` = 18 (8 collides the arms' hashed features, see `.whittle/simulate.py`; 18 leaves room for more arms and context values).
 - **Fail open:** any error means nothing is injected and nothing is logged.
 
 Grow it only when using it shows the need: plugin packaging when it's wanted in a second repo, proxy rewards (§7) when `+`/`-` turns out too sparse, more sites when one has visibly learned something.
