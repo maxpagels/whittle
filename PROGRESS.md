@@ -83,5 +83,6 @@ cargo install --git https://github.com/maxpagels/gittins --rev 5a7f2413d0ae166d9
    - Which ε? Use `gittins sweep` on the simulated logs.
 3. **Version the arms (§10.3).** Name each arm by a hash of its text, so editing an arm doesn't mix new data into the old arm's history.
 4. **Rewards beyond `+`/`-` (§7).** Only once real use shows that ratings are too sparse.
+5. **Session file hygiene.** `post_tool_use` reads, changes and writes the session file without a lock, so parallel edits in one session can drop line counts; lock it per session. Settled and expired session files are never deleted; settling could remove them, since `signals.jsonl` keeps the outcome.
 
 Defer plugin packaging and more sites until one site has visibly learned something (DESIGN §0).
