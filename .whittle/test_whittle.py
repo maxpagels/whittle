@@ -131,22 +131,6 @@ def test_sessions_store_hashes_not_code(w, tmp_path):
     assert len(lines) == 2 and all(len(k) == 16 for k in lines)
 
 
-def test_sessions_recorded_as_raw_text_still_score(w, tmp_path):
-    src = tmp_path / "app.py"
-    src.write_text("def main():\n    return compute()\n")
-    start(w, "s1")
-    path = w.HOME / "sessions" / "s1"
-    session = json.loads(path.read_text())
-    session["lines"] = {str(src): {"def main():": 1, "return compute()": 1}}
-    path.write_text(json.dumps(session))
-    edit(w, "s1", src, "return compute()", "return compute(items)")  # replaces a line recorded raw
-
-    settle_later(w)
-
-    [row] = signals(w, "s1")
-    assert row["retention"] == 1.0 and row["lines"] == 2
-
-
 def test_trivial_lines_are_ignored(w, tmp_path):
     src = tmp_path / "app.js"
     start(w, "s1")
@@ -278,15 +262,6 @@ def test_status_counts_each_way_a_session_ends(w, tmp_path):
         w.status()
     text = out.getvalue()
     assert all(arm in text for arm in arms) and "not enough data" in text
-
-
-def test_old_session_files_still_resume(w):
-    (w.HOME / "sessions").mkdir()
-    (w.HOME / "sessions" / "old").write_text("whittle:0 tests-first")
-
-    assert start(w, "old") == (w.HOME / "arms" / "tests-first.md").read_text() + "\n"
-    settle_later(w)  # and settling skips them rather than failing
-    assert (w.HOME / "sessions" / "old").read_text() == "whittle:0 tests-first"
 
 
 def test_status_shows_this_sessions_arm_file(w):

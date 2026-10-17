@@ -37,11 +37,7 @@ def with_state(step):
 
 
 def load_session(sid):
-    text = (HOME / "sessions" / sid).read_text()
-    if not text.startswith("{"):  # pre-JSON format: "decision_id arm", never settled
-        decision, arm = text.split()
-        return {"decision": decision, "arm": arm}
-    return json.loads(text)
+    return json.loads((HOME / "sessions" / sid).read_text())
 
 
 def save_session(sid, session):
@@ -62,21 +58,13 @@ def significant(text):
     return Counter(digest(line) for line in lines if len(line) >= 4 and any(c.isalnum() for c in line))
 
 
-def tracked(lines):
-    """A session's recorded lines as hashes; files written before hashing stored the raw text."""
-    hashed = Counter()
-    for line, n in lines.items():
-        hashed[line if len(line) == 16 and all(c in "0123456789abcdef" for c in line) else digest(line)] += n
-    return hashed
-
-
 def retention(session):
     """Share of the lines Claude wrote that are still in their files; None if it wrote none."""
     kept = total = 0
     for name, lines in session.get("lines", {}).items():
         path = Path(name)
         now = significant(path.read_text(errors="replace")) if path.is_file() else Counter()
-        kept += sum((tracked(lines) & now).values())
+        kept += sum((Counter(lines) & now).values())
         total += sum(lines.values())
     return (kept / total if total else None), total
 
@@ -132,7 +120,7 @@ def settle(state, now):
         if path.suffix == ".tmp":
             continue
         session = load_session(path.name)
-        if "t" not in session or session.get("settled") or now - session["t"] < SETTLE:
+        if session.get("settled") or now - session["t"] < SETTLE:
             continue
         signals, reward = score(session)
         used = "rating" if "rating" in session else "none"
@@ -174,13 +162,11 @@ def post_tool_use(event):
     if not (HOME / "sessions" / sid).exists() or not edit.get("file_path"):
         return
     session = load_session(sid)
-    if "t" not in session:
-        return
     name = edit["file_path"]
     if event.get("tool_name") == "Write":
         lines = significant(edit.get("content", ""))
     else:
-        lines = tracked(session["lines"].get(name, {}))
+        lines = Counter(session["lines"].get(name, {}))
         for e in edit.get("edits") or [edit]:
             old, new = significant(e.get("old_string", "")), significant(e.get("new_string", ""))
             lines = lines - (old - new) + (new - old)
@@ -201,7 +187,7 @@ def prompt(event):
         return res, (res,) if res else ()
 
     res = with_state(step)
-    if res and "t" in session:
+    if res:
         save_session(sid, {**load_session(sid), "rating": reward})
     note = (f"whittle: noted {rating}" if res else
             "whittle: this session was already scored automatically" if session.get("settled") else
