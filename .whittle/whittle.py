@@ -5,7 +5,7 @@
 """whittle v0: gittins picks an arm at session start. You rate with + or -; sessions you
 don't rate are scored from how much of Claude's code survived and how often you pushed back."""
 
-import fcntl, json, re, sys, time
+import fcntl, json, re, shutil, subprocess, sys, time
 from collections import Counter
 from pathlib import Path
 
@@ -15,6 +15,7 @@ HOME = Path(__file__).parent
 HORIZON = 86400.0
 SETTLE = 8 * 3600  # score a session this long after it starts; must stay below HORIZON
 FRICTION_WEIGHT, FRICTION_CAP = 0.15, 3  # guesses until signals.jsonl has ratings to fit them
+MIN_OBSERVED = 50  # scored sessions per arm before status reports an estimate (DESIGN §9.2)
 CORRECTION = re.compile(r"(no|nope|wrong|revert|undo|stop|don'?t|that'?s not|that is not|not what)\b", re.I)
 
 
@@ -196,9 +197,90 @@ def prompt(event):
     print(json.dumps({"decision": "block", "reason": note}))
 
 
+def preferred(serialized, arms, model):
+    """The arm the state exploits at each hour, or "no preference" while scores tie. Read-only."""
+    hours = Counter()
+    for hour in range(24):
+        best = "no preference"
+        for k in range(100):
+            rec = gittins.decide(gittins.deserialize(serialized), {"model": model, "hour": str(hour)},
+                                 [(a, {}) for a in arms], t=0.0, salt=f"status-{k}")
+            if abs(rec.propensity - 1 / len(arms)) < 1e-9:
+                break  # uniform: every arm scores the same
+            if rec.propensity > 0.5:
+                best = arms[rec.chosen]
+                break
+        hours[best] += 1
+    return dict(hours)
+
+
+def summary():
+    """Per-arm outcomes, the state's preferences and a verdict, from the log; touches nothing."""
+    log, sig = HOME / "log.jsonl", HOME / "signals.jsonl"
+    events = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+    auto = {r["decision"] for r in map(json.loads, sig.read_text().splitlines()) if r["used"] == "proxy"} \
+        if sig.exists() else set()
+    decisions = [e for e in events if e["event"] == "decision"]
+    resolved = {e["decision_id"]: e for e in events if e["event"] == "resolution"}
+    names = sorted({c[0] for e in decisions for c in e["candidates"]} | {p.stem for p in (HOME / "arms").glob("*.md")})
+    arms = {a: {"rated": 0, "auto": 0, "expired": 0, "rewards": []} for a in names}
+    open_ = 0
+    for e in decisions:
+        decision_id = e["record"]["decision_id"]
+        arm = arms[e["candidates"][e["record"]["chosen"]][0]]
+        res = resolved.get(decision_id)
+        if res is None:
+            open_ += 1  # no arm: the current session is among these, and its arm stays blind
+        elif res["kind"] == "expired":
+            arm["expired"] += 1
+        else:
+            arm["auto" if decision_id in auto else "rated"] += 1
+            arm["rewards"].append(res["reward"])
+    for arm in arms.values():
+        rewards = arm.pop("rewards")
+        arm["mean"] = sum(rewards) / len(rewards) if rewards else None
+    state = HOME / "state"
+    prefs = preferred(state.read_text(), names, decisions[-1]["context"]["model"]) if state.exists() and decisions else {}
+    fewest = min(names, key=lambda a: arms[a]["rated"] + arms[a]["auto"]) if names else None
+    seen = arms[fewest]["rated"] + arms[fewest]["auto"] if fewest else 0
+    verdict = (f"not enough data: {MIN_OBSERVED} scored sessions per arm needed, {fewest} has {seen}"
+               if seen < MIN_OBSERVED else "enough scored sessions per arm for an off-policy estimate")
+    return {"sessions": len(decisions), "open": open_, "arms": arms, "preferred": prefs, "verdict": verdict}
+
+
+def status():
+    report = summary()
+    arms = report["arms"]
+    if not report["sessions"]:
+        print("whittle: no sessions yet")
+        return
+    print(f"{report['sessions']} sessions, {report['open']} still open (their arms are hidden until scored)\n")
+    cols = ("rated", "auto", "expired")
+    print(f"{'arm':<14}" + "".join(f"{c:>9}" for c in cols) + f"{'mean':>7}")
+    for name, a in arms.items():
+        mean = "-" if a["mean"] is None else f"{a['mean']:.2f}"
+        print(f"{name:<14}" + "".join(f"{a[c]:>9}" for c in cols) + f"{mean:>7}")
+    scored = sum(a["rated"] + a["auto"] for a in arms.values())
+    expired = sum(a["expired"] for a in arms.values())
+    print("\nmean = average reward over rated and auto-scored sessions; expired ones count as missing")
+    if expired > scored:
+        print(f"warning: more sessions expired ({expired}) than were scored ({scored})")
+    prefs = sorted(report["preferred"].items(), key=lambda kv: -kv[1])
+    print("prefers: " + (", ".join(f"{a} ({h}/24 hours)" for a, h in prefs) or "no state yet"))
+    print(report["verdict"])
+    cli = shutil.which("gittins")
+    if not report["verdict"].startswith("not enough") and cli:
+        out = subprocess.run([cli, "eval", "--log", str(HOME / "log.jsonl"), "--bits", "18", "--epsilon", "0.2"],
+                             capture_output=True, text=True)
+        print("\ngittins eval (the learned policy, estimated on logged sessions)\n" + (out.stdout + out.stderr).rstrip())
+
+
 HOOKS = {"SessionStart": session_start, "UserPromptSubmit": prompt, "PostToolUse": post_tool_use}
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["status"]:
+        status()
+        sys.exit()
     try:
         event = json.load(sys.stdin)
         HOOKS.get(event["hook_event_name"], lambda e: None)(event)

@@ -1,7 +1,7 @@
 # whittle: progress notes
 
 > **Last updated:** 2026-10-17
-> **State:** changes below are committed in `48aa66a` (WIP). Nothing pushed.
+> **State:** everything below is committed. The rewritten history is local only; `origin/main` still has the old WIP commits.
 
 ## Done this session
 
@@ -34,15 +34,6 @@ uv run --script .whittle/simulate.py [--sessions 600] [--seed 1] [--keep DIR]
 
 The 8-bit state can't be reused with `bits=12`, and the new state restarts decision ids at `whittle:0`, which would collide with old session files. I moved `state`, `log.jsonl` and `sessions/` to `.whittle/archive-bits8/` (gitignored). It only holds 3 sessions; delete it whenever you like.
 
-### Committed in `48aa66a` (WIP)
-
-```
- M .whittle/whittle.py      bits=8 -> bits=12
- M DESIGN.md                §0: --bits 12, note on why
- A .whittle/simulate.py     new
- A PROGRESS.md              this file
-```
-
 ### Simulation run, 2026-10-17 (seed 1, 600 sessions): PASS
 
 All checks passed, including the `gittins` CLI checks (`verify`, `replay`). `tests-first` went from 80% to 87% of picks between the first and last sixth of sessions. It was already at 80% early on, because the gaps between arms are large (25/50/75%). `gittins eval`: average reward 0.635 over 598 resolved decisions.
@@ -58,6 +49,22 @@ The output, log, state and sessions are saved in `.whittle/sim-runs/2026-10-17-s
 - The live 12-bit state (1 decision, this session) moved to `.whittle/archive-bits12/`; its files are ignored by the same `.gitignore` patterns as `archive-bits8/`.
 - The run in `sim-runs/2026-10-17-seed1/` was made at `bits=12`; replay or eval it with `--bits 12`.
 
+### Automatic rewards: retention and friction
+
+- `whittle.py` adds a `PostToolUse` hook that records Claude's added lines per session. Session files are now JSON; the old `id arm` format is still read and never settled.
+- The first `SessionStart` at least 8h after a session started settles it: retention minus friction, learned unless the user rated. Every settled session is logged to `.whittle/signals.jsonl` (gitignored). See DESIGN §0.
+- Transcript markers were checked against real transcripts. An interrupt is a user text block `[Request interrupted by user]`. A denial is a `tool_result` with `is_error` and "The user doesn't want to proceed…". Denying at the prompt also writes `[… for tool use]`, which isn't counted again. On one real axiom session, all 4 flagged corrections were genuine.
+- Tests: `.whittle/test_whittle.py`, 10 passing (`uv run --with pytest --with 'gittins>=2' pytest -q .whittle/test_whittle.py`). `simulate.py` still passes; its sessions have no signals, so they expire as before.
+- `.claude/settings.json` runs `whittle.py` on `PostToolUse` for `Edit|Write|MultiEdit`.
+- Known limits: settling only happens when a new session starts between 8h and 24h after the old one, otherwise the session expires. The horizon is baked into the state, so lengthening it means a state reset. Retention ≈ 1 for most kept sessions, so most of the difference between arms comes from friction and the occasional revert.
+
+### `/whittle` status command
+
+- `whittle.py status`, run by `.claude/commands/whittle.md`. See DESIGN §0. Covered by 2 more tests (12 in total). On a simulated run it takes about 0.2s.
+- The command runs `.whittle/whittle.py` by a relative path, so it assumes Claude Code was started from the repo root.
+- **50 scored sessions per arm is slow at ε = 0.2.** Each losing arm gets about 7% of traffic, so it takes roughly 750 sessions. In the 600-session simulation, baseline reached 33.
+- **The `gittins eval` section isn't very informative yet.** It estimates the logging configuration on its own log, so IPS equals the logged mean, with weights of 1. The useful number is DESIGN §11.2's baseline comparison: an IPS estimate of "always baseline" (mean of 𝟙[arm = baseline]·r/p) against the learned policy. It's cheap to compute from the log in `summary()`.
+
 ## gittins CLI
 
 `gittins` v2.0.0 is on PATH at `~/.local/bin/gittins`. The simulation now runs its CLI checks instead of skipping them. Earlier runs used a source build of `gittins-cli` v1.0.9:
@@ -68,14 +75,13 @@ cargo install --git https://github.com/maxpagels/gittins --rev 5a7f2413d0ae166d9
 
 ## Next steps (recommended order)
 
-1. **Squash/reword the WIP commit** if you want a clean history.
-2. **Collision guard.** `bits=12` fixed this arm set partly by luck; adding arms or context values can collide again silently. Add a check that hashes every arm's features for every context value and fails if two arms share a slot. Put it in `simulate.py`, and/or warn at `SessionStart`.
-3. **Simulate realistic usage (§16.5).** Use 10–30 sessions a day, sparse ratings, and 5–10 point gaps between arms. Questions to answer:
+1. **Collision guard.** `bits=12` fixed this arm set partly by luck; adding arms or context values can collide again silently. Add a check that hashes every arm's features for every context value and fails if two arms share a slot. Put it in `simulate.py`, and/or warn at `SessionStart`.
+2. **Simulate realistic usage (§16.5).** Use 10–30 sessions a day, sparse ratings, and 5–10 point gaps between arms. Questions to answer:
    - How many weeks until it learns?
    - Should `hour` be grouped or dropped? At 24 separate values it splits the data; in a standalone test it cut the best arm's late share from 89% to 68%.
    - What does training unrated sessions as 0.5 cost? It shrinks the gaps between arms.
    - Which ε? Use `gittins sweep` on the simulated logs.
-4. **Version the arms (§10.3).** Name each arm by a hash of its text, so editing an arm doesn't mix new data into the old arm's history.
-5. **Rewards beyond `+`/`-` (§7).** Only once real use shows that ratings are too sparse.
+3. **Version the arms (§10.3).** Name each arm by a hash of its text, so editing an arm doesn't mix new data into the old arm's history.
+4. **Rewards beyond `+`/`-` (§7).** Only once real use shows that ratings are too sparse.
 
 Defer plugin packaging and more sites until one site has visibly learned something (DESIGN §0).

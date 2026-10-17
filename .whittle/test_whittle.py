@@ -203,6 +203,56 @@ def test_sessions_settle_once(w, tmp_path):
     assert len(signals(w, "s1")) == 1
 
 
+def snapshot(home):
+    return {p: p.read_bytes() for p in home.rglob("*") if p.is_file()}
+
+
+def test_status_on_a_fresh_install(w):
+    before = snapshot(w.HOME)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        w.status()
+    assert "no sessions yet" in out.getvalue()
+    assert snapshot(w.HOME) == before
+
+
+def test_status_counts_each_way_a_session_ends(w, tmp_path):
+    t0 = w.time.t
+    start(w, "rated")
+    run(w, "UserPromptSubmit", session_id="rated", prompt="+")
+    w.time.t = t0 + 1 * HOUR
+    start(w, "auto")
+    write(w, "auto", tmp_path / "app.py", "def main():\n    return compute()\n")
+    w.time.t = t0 + 2 * HOUR
+    start(w, "quiet", transcript(tmp_path, prompt("what does this do?")))
+    w.time.t = t0 + 11 * HOUR
+    start(w, "pending")  # settles rated, auto, quiet
+    w.time.t = t0 + 27 * HOUR
+    start(w, "fresh")  # expires quiet; pending settles with no signal and stays open
+
+    before = snapshot(w.HOME)
+    report = w.summary()
+    assert snapshot(w.HOME) == before
+
+    arms = report["arms"]
+    total = {k: sum(a[k] for a in arms.values()) for k in ("rated", "auto", "expired")}
+    assert total == {"rated": 1, "auto": 1, "expired": 1}
+    assert report["open"] == 2  # open sessions are counted without their arm: one of them is yours
+    assert all(set(a) == {"rated", "auto", "expired", "mean"} for a in arms.values())
+    arm_of = lambda sid: json.loads((w.HOME / "sessions" / sid).read_text())["arm"]
+    assert arms[arm_of("rated")]["rated"] == 1 and arms[arm_of("auto")]["auto"] == 1
+    assert arms[arm_of("auto")]["mean"] == 1.0
+    assert sum(report["preferred"].values()) == 24
+    assert set(report["preferred"]) <= set(arms) | {"no preference"}
+    assert report["verdict"].startswith("not enough data")
+
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        w.status()
+    text = out.getvalue()
+    assert all(arm in text for arm in arms) and "not enough data" in text
+
+
 def test_old_session_files_still_resume(w):
     (w.HOME / "sessions").mkdir()
     (w.HOME / "sessions" / "old").write_text("whittle:0 tests-first")
