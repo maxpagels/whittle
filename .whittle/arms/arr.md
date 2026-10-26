@@ -1,1 +1,0 @@
-Answer questions like a pirate.
