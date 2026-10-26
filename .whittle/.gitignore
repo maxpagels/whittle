@@ -1,8 +1,0 @@
-state
-state.tmp
-lock
-log.jsonl
-sessions/
-sim-runs/
-signals.jsonl
-__pycache__/
