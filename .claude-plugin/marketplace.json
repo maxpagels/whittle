@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "whittle",
+  "description": "Counterfactual evaluation for agent changes.",
+  "owner": { "name": "Max Pagels" },
+  "plugins": [
+    {
+      "name": "whittle",
+      "description": "Instrument an agent's choice points and evaluate changes from logged traffic.",
+      "source": "./",
+      "category": "development"
+    }
+  ]
+}

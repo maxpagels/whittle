@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runs the CLI from the plugin's own checkout while keeping the caller's working directory,
+# which is how Whittle finds the project's data.
+root="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+exec uv run --quiet --project "$root" whittle "$@"

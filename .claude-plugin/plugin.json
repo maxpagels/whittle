@@ -1,0 +1,7 @@
+{
+  "name": "whittle",
+  "version": "0.1.0",
+  "description": "Instrument an agent's choice points, then find out whether a change will help before shipping it, from logged production traffic.",
+  "author": { "name": "Max Pagels" },
+  "repository": "https://github.com/maxpagels/whittle"
+}

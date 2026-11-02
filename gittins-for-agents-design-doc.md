@@ -42,45 +42,47 @@ Additions:
 
 ## API and log format
 
-Existing functions stay the same. Changes are additive.
+Whittle is a thin layer over Gittins, which owns the draw, propensities, the exactly-once ledger, expiry and the log format. Whittle pins the policy with `explore` and a no-op `train`, so there is no online learning, and stores the state on disk.
 
 ```python
-d = g.decide(context={"task": "code", "len": "long"},
-             actions=["model-a", "model-b", "local-7b"],
-             decision_point="router", trajectory_id=run_id)
-# ...run the agent with d.action...
-g.learn(d.id, reward={"success": 1, "cost_eur": 0.004, "latency_s": 2.1}, t=now)
+with whittle.run(run_id):
+    d = whittle.decide("router", ["model-a", "model-b", "local-7b"],
+                       context={"task": "code", "len": "long"})
+    # ...run the agent with d.action...
+    whittle.learn(success=1, cost_eur=0.004, latency_s=2.1)
 ```
 
 ```
-gittins eval logs.jsonl --policy policies/long_code_to_b.py \
-  --objective "success - 50*cost_eur" --estimator dr --dm judge_model.pkl
-gittins plan --policy policies/long_code_to_b.py --target-ci 0.01
+whittle eval --policy policies/long_code_to_b.py --objective "success - 50*cost_eur"
+whittle plan --policy policies/long_code_to_b.py --target-ci 0.01
 ```
 
-Log line changes:
+The policy file defines `policy(d)`, and `q(d)` to enable DR, so a team's judge plugs in as a function.
+
+Lines stay canonical Gittins lines, so `gittins verify` works on them. Added fields:
 
 | Field | Line type | Purpose |
 | --- | --- | --- |
-| `decision_point` | decision | Names the choice point in the agent |
-| `trajectory_id` | decision | Groups decisions from one agent run |
-| `reward` (object) | resolution | Vector reward; a scalar is still accepted |
-| `format_version` | both | Bumped to 2; v1 logs still verify and replay |
+| `whittle.point` | decision | Names the choice point in the agent |
+| `whittle.run_id` | decision | Groups decisions from one agent run |
+| `whittle.default`, `whittle.epsilon` | decision | The logging policy, needed for support checks |
+| `whittle.format_version` | decision | 2 |
+| `rewards` | resolution | Vector reward; `reward` keeps the first value, so lines stay canonical |
 
 ## Distribution: Claude Code plugin, no backend
 
-The evaluator ships as a library, a local CLI and a Claude Code plugin. It needs no backend. Working name: Horvitz, after the Horvitz–Thompson estimator behind IPS.
+The evaluator ships as a library, a local CLI and a Claude Code plugin. It needs no backend. Name: Whittle.
 
-**No backend.** The library writes append-only JSONL logs wherever the user chooses (local disk, S3, a warehouse export). The CLI reads them and evaluates locally. We never host or see user data. Proxy mode is the one running service, and users host it themselves.
+**No backend.** Each operation takes a file lock, loads the Gittins state, runs, appends to the log and saves: the "load state, decide, learn, save state" pattern from the Gittins docs. The ledger is therefore on disk and any process can resolve a decision. State lives in a per-project data directory, or at the path in `WHITTLE_STORE`. Developers don't handle paths, state or log files. The CLI reads the log and evaluates locally; `gittins verify` checks it first. We never host or see user data. Proxy mode is the one running service, and users host it themselves.
 
 **Plugin components:**
 
 | Component | What it does |
 | --- | --- |
-| `/horvitz:instrument` skill | Finds choice points in the user's agent code and adds `decide()`/`learn()` with propensity logging |
-| `/horvitz:eval` skill | Turns a plain-language change into a target-policy file, runs the eval, explains estimate, CI, ESS and the ship decision |
-| `/horvitz:plan` skill | Estimates the exploration traffic needed to evaluate a change |
-| Hook | When a prompt or routing file changes, runs an eval against the logs |
+| `/whittle:instrument` skill | Finds choice points in the user's agent code and adds `decide()`/`learn()` with propensity logging |
+| `/whittle:eval` skill | Turns a plain-language change into a target-policy file, runs the eval, explains estimate, CI, ESS and the ship decision |
+| `/whittle:plan` skill | Estimates the exploration traffic needed to evaluate a change |
+| Hook | When a file with a choice point changes, points Claude to `/whittle:eval` |
 | Reviewer agent | Checks diagnostics (ESS, max weight, propensity coverage) before a result is trusted |
 
 Skills call the CLI directly. A local MCP server is optional, added only if typed tools are wanted. The plugin is published from a public GitHub repo with a marketplace file.
@@ -89,6 +91,7 @@ Skills call the CLI directly. A local MCP server is optional, added only if type
 
 1. Claude never computes the numbers. Every estimate comes from the deterministic CLI. Claude writes policies, runs commands and interprets output.
 2. The plugin evaluates; it doesn't collect. Logs come from production systems running the library. The README says this up front.
+3. Storage is the library's job. Instrumented code never mentions it, and a logging failure never reaches the agent.
 
 ## Milestones
 
