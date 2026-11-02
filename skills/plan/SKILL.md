@@ -18,7 +18,7 @@ With logged data and a policy file (see `/whittle:eval`):
 Before any data exists, for a 0-1 reward, where `--actions` is the number of actions at the choice point:
 
 ```
-"${CLAUDE_PLUGIN_ROOT}/bin/whittle" plan --epsilon 0.02 --actions 3 --target-ci 0.01
+"${CLAUDE_PLUGIN_ROOT}/bin/whittle" plan --epsilon 0.05 --actions 3 --target-ci 0.01
 ```
 
 Explain the result in traffic terms. The number needed scales with 1/epsilon and with 1/target-ci², so doubling `WHITTLE_EPSILON` halves the time and doubles how many calls take a non-default path. Choosing epsilon is the user's call, because it is a budget of real traffic.

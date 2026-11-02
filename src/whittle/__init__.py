@@ -23,7 +23,7 @@ from .store import warn_once
 __all__ = ["Decision", "decide", "learn", "run"]
 
 FORMAT_VERSION = 2
-DEFAULT_EPSILON = 0.02
+DEFAULT_EPSILON = 0.05
 MAX_STRING = 256  # longer values are hashed: context is for features, not prompts or documents
 
 _run = contextvars.ContextVar("whittle_run", default=None)

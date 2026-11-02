@@ -34,7 +34,7 @@ with whittle.run(request_id):
     whittle.learn(success=1, cost_eur=0.004, latency_s=2.1)
 ```
 
-The first action is the current default; about 2% of calls explore. Outcomes can arrive from any process, within the horizon: `whittle.learn(run_id=request_id, success=1, feedback=1)`. The first name is the Gittins reward; all of them are kept for evaluation.
+The first action is the current default; about 5% of calls explore. Outcomes can arrive from any process, within the horizon: `whittle.learn(run_id=request_id, success=1, feedback=1)`. The first name is the Gittins reward; all of them are kept for evaluation.
 
 ## CLI
 
@@ -70,7 +70,7 @@ If logging fails, or the lock isn't free within a second, the agent gets the def
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `WHITTLE_STORE` | local | A path |
-| `WHITTLE_EPSILON` | `0.02` | Share of calls that explore; `0` turns exploration off |
+| `WHITTLE_EPSILON` | `0.05` | Share of calls that explore; `0` turns exploration off |
 | `WHITTLE_HORIZON_DAYS` | `7` | How long a decision waits for its outcome; fixed when the state is first created |
 
 ## Limits
